@@ -333,6 +333,9 @@ impl Transaction {
         }
 
         if all_values.is_empty() {
+            if rule.operator.name() == "unconditionalMatch" {
+                return Ok((!rule.operator_negated, Vec::new()));
+            }
             // No values to match
             return Ok((rule.operator_negated, Vec::new()));
         }
