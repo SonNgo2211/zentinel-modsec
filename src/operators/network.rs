@@ -48,9 +48,35 @@ impl IpMatchOperator {
 
     /// Create from a file containing IPs/CIDRs.
     pub fn from_file(path: &str) -> Result<Self> {
-        let content = std::fs::read_to_string(path).map_err(|e| Error::RuleFileLoad {
+        // Try the path as-is first, then common CRS locations
+        let possible_paths = [
+            path.to_string(),
+            format!("/etc/modsecurity/rules/{}", path),
+            format!("/etc/modsecurity/config/rules/{}", path),
+            format!("/etc/modsecurity/config/{}", path),
+            format!("/etc/modsecurity/{}", path),
+            format!("test-rules/crs/rules/{}", path),
+            format!("rules/{}", path),
+        ];
+
+        let mut content = None;
+        let mut last_error = None;
+
+        for p in &possible_paths {
+            match std::fs::read_to_string(p) {
+                Ok(c) => {
+                    content = Some(c);
+                    break;
+                }
+                Err(e) => {
+                    last_error = Some(e);
+                }
+            }
+        }
+
+        let content = content.ok_or_else(|| Error::RuleFileLoad {
             path: path.into(),
-            source: e,
+            source: last_error.unwrap(),
         })?;
 
         let networks = content

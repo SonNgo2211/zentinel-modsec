@@ -177,6 +177,7 @@ impl CompiledRuleset {
 
                     let rules_for_phase = ruleset.rules.by_phase.entry(phase).or_default();
                     let idx = rules_for_phase.len();
+                    println!("DEBUG: Compiled rule {} in phase {:?}", compiled.id.as_deref().unwrap_or("unknown"), phase);
                     rules_for_phase.push(compiled);
 
                     // Handle chaining

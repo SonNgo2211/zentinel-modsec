@@ -385,22 +385,38 @@ fn tokenize(input: &str) -> Vec<Token> {
         if c == '\'' || c == '"' {
             let quote = c;
             let mut value = String::new();
-            i += 1;
-            while i < chars.len() && chars[i] != quote {
-                if chars[i] == '\\' && i + 1 < chars.len() {
-                    value.push(chars[i + 1]);
-                    i += 2;
+            let mut j = i + 1;
+            let mut found = false;
+            while j < chars.len() {
+                if chars[j] == quote {
+                    found = true;
+                    break;
+                }
+                if chars[j] == '\\' && j + 1 < chars.len() {
+                    value.push(chars[j + 1]);
+                    j += 2;
                 } else {
-                    value.push(chars[i]);
-                    i += 1;
+                    value.push(chars[j]);
+                    j += 1;
                 }
             }
-            i += 1; // Skip closing quote
-            tokens.push(Token {
-                token_type: TokenType::String,
-                value,
-            });
-            continue;
+
+            if found {
+                i = j + 1;
+                tokens.push(Token {
+                    token_type: TokenType::String,
+                    value,
+                });
+                continue;
+            } else {
+                // Unclosed quote - treat as a single character token for better detection
+                tokens.push(Token {
+                    token_type: TokenType::String,
+                    value: quote.to_string(),
+                });
+                i += 1;
+                continue;
+            }
         }
 
         // Comment

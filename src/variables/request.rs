@@ -94,16 +94,20 @@ impl RequestData {
             if let Some(pos) = pair.find('=') {
                 let key = &pair[..pos];
                 let value = &pair[pos + 1..];
+                // Handle + as space
+                let key = key.replace('+', " ");
+                let value = value.replace('+', " ");
                 // URL decode
-                let key = percent_encoding::percent_decode_str(key)
+                let key = percent_encoding::percent_decode_str(&key)
                     .decode_utf8_lossy()
                     .to_string();
-                let value = percent_encoding::percent_decode_str(value)
+                let value = percent_encoding::percent_decode_str(&value)
                     .decode_utf8_lossy()
                     .to_string();
                 self.args_get.add(key, value);
             } else if !pair.is_empty() {
-                let key = percent_encoding::percent_decode_str(pair)
+                let key = pair.replace('+', " ");
+                let key = percent_encoding::percent_decode_str(&key)
                     .decode_utf8_lossy()
                     .to_string();
                 self.args_get.add(key, String::new());
@@ -118,10 +122,13 @@ impl RequestData {
             if let Some(pos) = pair.find('=') {
                 let key = &pair[..pos];
                 let value = &pair[pos + 1..];
-                let key = percent_encoding::percent_decode_str(key)
+                // Handle + as space
+                let key = key.replace('+', " ");
+                let value = value.replace('+', " ");
+                let key = percent_encoding::percent_decode_str(&key)
                     .decode_utf8_lossy()
                     .to_string();
-                let value = percent_encoding::percent_decode_str(value)
+                let value = percent_encoding::percent_decode_str(&value)
                     .decode_utf8_lossy()
                     .to_string();
                 self.args_post.add(key, value);

@@ -307,23 +307,25 @@ fn parse_single_action(input: &str) -> Result<Action> {
 
         // Metadata actions
         "id" => {
-            let id: u64 = argument
+            let id_str = argument
                 .as_ref()
-                .and_then(|s| s.parse().ok())
-                .ok_or_else(|| Error::InvalidActionArgument {
-                    action: "id".to_string(),
-                    message: "invalid ID".to_string(),
-                })?;
+                .map(|s| s.trim_matches(|c| c == '\'' || c == '"'))
+                .unwrap_or("");
+            let id: u64 = id_str.parse().map_err(|_| Error::InvalidActionArgument {
+                action: "id".to_string(),
+                message: format!("invalid ID: '{}'", id_str),
+            })?;
             Ok(Action::Metadata(MetadataAction::Id(id)))
         }
         "phase" => {
-            let phase: u8 = argument
+            let phase_str = argument
                 .as_ref()
-                .and_then(|s| s.parse().ok())
-                .ok_or_else(|| Error::InvalidActionArgument {
-                    action: "phase".to_string(),
-                    message: "invalid phase".to_string(),
-                })?;
+                .map(|s| s.trim_matches(|c| c == '\'' || c == '"'))
+                .unwrap_or("");
+            let phase: u8 = phase_str.parse().map_err(|_| Error::InvalidActionArgument {
+                action: "phase".to_string(),
+                message: format!("invalid phase: '{}'", phase_str),
+            })?;
             Ok(Action::Metadata(MetadataAction::Phase(phase)))
         }
         "severity" => {
@@ -359,23 +361,25 @@ fn parse_single_action(input: &str) -> Result<Action> {
             Ok(Action::Metadata(MetadataAction::Ver(ver.to_string())))
         }
         "maturity" => {
-            let mat: u8 = argument
+            let mat_str = argument
                 .as_ref()
-                .and_then(|s| s.parse().ok())
-                .ok_or_else(|| Error::InvalidActionArgument {
-                    action: "maturity".to_string(),
-                    message: "invalid maturity".to_string(),
-                })?;
+                .map(|s| s.trim_matches(|c| c == '\'' || c == '"'))
+                .unwrap_or("");
+            let mat: u8 = mat_str.parse().map_err(|_| Error::InvalidActionArgument {
+                action: "maturity".to_string(),
+                message: format!("invalid maturity: '{}'", mat_str),
+            })?;
             Ok(Action::Metadata(MetadataAction::Maturity(mat)))
         }
         "accuracy" => {
-            let acc: u8 = argument
+            let acc_str = argument
                 .as_ref()
-                .and_then(|s| s.parse().ok())
-                .ok_or_else(|| Error::InvalidActionArgument {
-                    action: "accuracy".to_string(),
-                    message: "invalid accuracy".to_string(),
-                })?;
+                .map(|s| s.trim_matches(|c| c == '\'' || c == '"'))
+                .unwrap_or("");
+            let acc: u8 = acc_str.parse().map_err(|_| Error::InvalidActionArgument {
+                action: "accuracy".to_string(),
+                message: format!("invalid accuracy: '{}'", acc_str),
+            })?;
             Ok(Action::Metadata(MetadataAction::Accuracy(acc)))
         }
         "logdata" => {
@@ -384,13 +388,14 @@ fn parse_single_action(input: &str) -> Result<Action> {
             Ok(Action::Metadata(MetadataAction::LogData(data.to_string())))
         }
         "status" => {
-            let status: u16 = argument
+            let status_str = argument
                 .as_ref()
-                .and_then(|s| s.parse().ok())
-                .ok_or_else(|| Error::InvalidActionArgument {
-                    action: "status".to_string(),
-                    message: "invalid status code".to_string(),
-                })?;
+                .map(|s| s.trim_matches(|c| c == '\'' || c == '"'))
+                .unwrap_or("");
+            let status: u16 = status_str.parse().map_err(|_| Error::InvalidActionArgument {
+                action: "status".to_string(),
+                message: format!("invalid status code: '{}'", status_str),
+            })?;
             Ok(Action::Metadata(MetadataAction::Status(status)))
         }
 
@@ -612,5 +617,19 @@ mod tests {
             .filter(|a| matches!(a, Action::Transformation(_)))
             .collect();
         assert_eq!(transforms.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_quoted_id_and_phase() {
+        let actions = parse_actions("id:'200000',phase:'1'").unwrap();
+        assert_eq!(actions.len(), 2);
+        match &actions[0] {
+            Action::Metadata(MetadataAction::Id(id)) => assert_eq!(*id, 200000),
+            _ => panic!("expected Id"),
+        }
+        match &actions[1] {
+            Action::Metadata(MetadataAction::Phase(phase)) => assert_eq!(*phase, 1),
+            _ => panic!("expected Phase"),
+        }
     }
 }

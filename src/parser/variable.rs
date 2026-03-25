@@ -156,7 +156,19 @@ static VARIABLE_MAP: phf::Map<&'static str, VariableName> = phf_map! {
     "REQBODY_ERROR_MSG" => VariableName::ReqBodyErrorMsg,
     "REQBODY_PROCESSOR_ERROR" => VariableName::ReqBodyProcessorError,
     "REQBODY_PROCESSOR_ERROR_MSG" => VariableName::ReqBodyProcessorErrorMsg,
-    "MULTIPART_STRICT_ERROR" => VariableName::MultipartStrictCheck,
+    "MULTIPART_BOUNDARY_QUOTED" => VariableName::MultipartBoundaryQuoted,
+    "MULTIPART_BOUNDARY_WHITESPACE" => VariableName::MultipartBoundaryWhitespace,
+    "MULTIPART_DATA_AFTER" => VariableName::MultipartDataAfter,
+    "MULTIPART_DATA_BEFORE" => VariableName::MultipartDataBefore,
+    "MULTIPART_FILE_LIMIT_EXCEEDED" => VariableName::MultipartFileLimitExceeded,
+    "MULTIPART_HEADER_FOLDING" => VariableName::MultipartHeaderFolding,
+    "MULTIPART_INVALID_HEADER_FOLDING" => VariableName::MultipartInvalidHeaderFolding,
+    "MULTIPART_INVALID_PART" => VariableName::MultipartInvalidPart,
+    "MULTIPART_INVALID_QUOTING" => VariableName::MultipartInvalidQuoting,
+    "MULTIPART_LF_LINE" => VariableName::MultipartLfLine,
+    "MULTIPART_MISSING_SEMICOLON" => VariableName::MultipartMissingSemicolon,
+    "MULTIPART_STRICT_ERROR" => VariableName::MultipartStrictError,
+    "MULTIPART_UNMATCHED_BOUNDARY" => VariableName::MultipartUnmatchedBoundary,
 };
 
 impl VariableName {

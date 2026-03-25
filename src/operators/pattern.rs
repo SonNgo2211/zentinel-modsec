@@ -116,6 +116,10 @@ impl PmOperator {
         // Try the path as-is first, then common CRS locations
         let possible_paths = [
             path.to_string(),
+            format!("/etc/modsecurity/rules/{}", path),
+            format!("/etc/modsecurity/config/rules/{}", path),
+            format!("/etc/modsecurity/config/{}", path),
+            format!("/etc/modsecurity/{}", path),
             format!("test-rules/crs/rules/{}", path),
             format!("rules/{}", path),
         ];

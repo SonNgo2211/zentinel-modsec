@@ -37,6 +37,10 @@ impl<'a> VariableResolver<'a> {
     /// Resolve a variable specification to values.
     pub fn resolve(&self, spec: &VariableSpec) -> Vec<(String, String)> {
         let values = self.resolve_variable(spec.name, &spec.selection);
+        tracing::debug!("Resolving variable {:?}({:?}) -> {} values", spec.name, spec.selection, values.len());
+        for (k, v) in &values {
+            tracing::debug!("    {} = {:?}", k, v);
+        }
 
         // Apply exclusions
         if spec.exclusions.is_empty() {

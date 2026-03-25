@@ -177,6 +177,7 @@ impl Transaction {
         let mut skip_after: Option<String> = None;
 
         let mut idx = 0;
+        tracing::debug!("Running phase {:?} with {} rules", phase, rules.len());
         while idx < rules.len() {
             // Handle skip
             if skip_count > 0 {
@@ -200,6 +201,7 @@ impl Transaction {
             }
 
             let rule = &rules[idx];
+            tracing::debug!("Evaluating rule {} (phase {:?})", rule.id.as_deref().unwrap_or("unknown"), phase);
 
             // Handle chain continuation
             if chain_state.in_chain && !rule.is_chain && rule.chain_next.is_none() {
@@ -343,6 +345,7 @@ impl Transaction {
             let final_match = if rule.operator_negated { !result.matched } else { result.matched };
 
             if final_match {
+                tracing::info!("Rule {} MATCHED on value: {:?}", rule.id.as_deref().unwrap_or("unknown"), transformed);
                 return Ok((true, result.captures));
             }
         }
@@ -352,6 +355,7 @@ impl Transaction {
 
     /// Apply a setvar operation.
     fn apply_setvar(&mut self, op: &SetVarOp) {
+        tracing::debug!("Applying setvar: {:?} (operation: {:?})", op.name, op.operation);
         crate::actions::apply_setvar(&mut self.tx, op);
 
         // Sync anomaly score from TX if relevant
