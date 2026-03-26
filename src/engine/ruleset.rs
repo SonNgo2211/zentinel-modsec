@@ -161,7 +161,7 @@ impl CompiledRuleset {
                     let is_chain = has_chain(&rule.actions);
                     let transformations = extract_transformations(&rule.actions)?;
 
-                    let operator = compile_operator(&rule.operator)?;
+                    let operator = compile_operator(&rule.operator, rule.location.file.as_deref())?;
 
                     let compiled = CompiledRule {
                         id,
@@ -177,7 +177,6 @@ impl CompiledRuleset {
 
                     let rules_for_phase = ruleset.rules.by_phase.entry(phase).or_default();
                     let idx = rules_for_phase.len();
-                    println!("DEBUG: Compiled rule {} in phase {:?}", compiled.id.as_deref().unwrap_or("unknown"), phase);
                     rules_for_phase.push(compiled);
 
                     // Handle chaining
@@ -207,7 +206,7 @@ impl CompiledRuleset {
                         negated: false,
                         name: OperatorName::UnconditionalMatch,
                         argument: String::new(),
-                    })?;
+                    }, None)?;
 
                     let compiled = CompiledRule {
                         id,

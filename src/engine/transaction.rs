@@ -7,8 +7,9 @@ use super::intervention::Intervention;
 use super::phase::Phase;
 use super::ruleset::{CompiledRule, CompiledRuleset, RuleEngineMode};
 use super::scoring::AnomalyScore;
-use crate::actions::{execute_actions, DisruptiveOutcome, FlowOutcome, SetVarOp};
+use crate::actions::{execute_actions, DisruptiveOutcome, FlowOutcome, SetVarOp, SetVarOperation};
 use crate::error::Result;
+use crate::parser::VariableName;
 use crate::variables::{RequestData, ResponseData, TxCollection, VariableResolver};
 
 /// A ModSecurity transaction for processing a single request.
@@ -177,7 +178,9 @@ impl Transaction {
         let mut skip_after: Option<String> = None;
 
         let mut idx = 0;
-        tracing::debug!("Running phase {:?} with {} rules", phase, rules.len());
+        let mut current_chain_id: Option<String> = None;
+        let mut current_chain_should_log = false;
+
         while idx < rules.len() {
             // Handle skip
             if skip_count > 0 {
@@ -201,33 +204,65 @@ impl Transaction {
             }
 
             let rule = &rules[idx];
-            tracing::debug!("Evaluating rule {} (phase {:?})", rule.id.as_deref().unwrap_or("unknown"), phase);
+
+            // If we're starting a new chain (or a single rule), track the ID from the head
+            if !chain_state.in_chain {
+                current_chain_id = rule.id.clone();
+                current_chain_should_log = false;
+            }
 
             // Handle chain continuation
             if chain_state.in_chain && !rule.is_chain && rule.chain_next.is_none() {
                 // End of chain, check if previous rules in chain matched
                 if !chain_state.chain_matched {
                     chain_state.reset();
+                    current_chain_id = None;
+                    current_chain_should_log = false;
                     idx += 1;
                     continue;
                 }
             }
 
             // Evaluate rule
-            let (matched, captures) = self.evaluate_rule(rule)?;
+            let (matched, matched_value, captures) = self.evaluate_rule(rule)?;
 
             if matched {
                 // Execute actions
-                let action_result = execute_actions(&rule.actions, None, &captures);
+                let action_result =
+                    crate::actions::execute_actions(&rule.actions, matched_value.as_deref(), &captures);
 
-                // Track matched rule
-                if let Some(ref id) = rule.id {
-                    self.matched_rules.push(id.clone());
+                // Determine if this rule match should trigger logging of the chain
+                let is_strictly_blocking = matches!(
+                    action_result.disruptive,
+                    Some(DisruptiveOutcome::Deny(_))
+                        | Some(DisruptiveOutcome::Drop)
+                        | Some(DisruptiveOutcome::Redirect(_))
+                );
+                let causes_score_increment = action_result.setvar_ops.iter().any(|op| {
+                    (op.name.to_lowercase().contains("score")
+                        || op.collection.to_lowercase().contains("score"))
+                        && matches!(op.operation, SetVarOperation::Increment(_))
+                });
+
+                if (is_strictly_blocking || causes_score_increment) && !action_result.metadata.no_log {
+                    current_chain_should_log = true;
+                }
+
+                // If this is the end of a matching chain (or a single matching rule),
+                // and we decided it should be logged, add the ID of the chain head.
+                if !rule.is_chain {
+                    if current_chain_should_log {
+                        if let Some(id) = current_chain_id.take() {
+                            self.matched_rules.push(id);
+                        }
+                    }
+                    current_chain_should_log = false;
+                    current_chain_id = None;
                 }
 
                 // Apply setvar operations
                 for op in &action_result.setvar_ops {
-                    self.apply_setvar(op);
+                    self.apply_setvar(op, matched_value.as_deref(), None); // matched_var_name would need more tracking
                 }
 
                 // Handle flow control
@@ -316,7 +351,7 @@ impl Transaction {
     }
 
     /// Evaluate a single rule.
-    fn evaluate_rule(&self, rule: &CompiledRule) -> Result<(bool, Vec<String>)> {
+    fn evaluate_rule(&self, rule: &CompiledRule) -> Result<(bool, Option<String>, Vec<String>)> {
         let resolver = VariableResolver::new(
             &self.request,
             &self.response,
@@ -328,38 +363,41 @@ impl Transaction {
 
         // Resolve variables from all specs
         let mut all_values = Vec::new();
+        if rule.variables.is_empty() {
+            // SecAction or rule with no variables
+            let transformed = rule.transformations.apply("");
+            let result = rule.operator.execute(&transformed, Some(&self.tx));
+            let final_match = if rule.operator_negated { !result.matched } else { result.matched };
+            return Ok((final_match, Some(transformed.to_string()), result.captures));
+        }
+
         for spec in &rule.variables {
             all_values.extend(resolver.resolve(spec));
         }
 
         if all_values.is_empty() {
-            if rule.operator.name() == "unconditionalMatch" {
-                return Ok((!rule.operator_negated, Vec::new()));
-            }
-            // No values to match
-            return Ok((rule.operator_negated, Vec::new()));
+            // Variables were specified but none were found (e.g. TX:foo where foo is missing)
+            return Ok((false, None, Vec::new()));
         }
 
         // Apply transformations and match
         for (_name, value) in all_values {
             let transformed = rule.transformations.apply(&value);
-            let result = rule.operator.execute(&transformed);
+            let result = rule.operator.execute(&transformed, Some(&self.tx));
 
             let final_match = if rule.operator_negated { !result.matched } else { result.matched };
 
             if final_match {
-                tracing::info!("Rule {} MATCHED on value: {:?}", rule.id.as_deref().unwrap_or("unknown"), transformed);
-                return Ok((true, result.captures));
+                return Ok((true, Some(transformed.to_string()), result.captures));
             }
         }
 
-        Ok((false, Vec::new()))
+        Ok((false, None, Vec::new()))
     }
 
     /// Apply a setvar operation.
-    fn apply_setvar(&mut self, op: &SetVarOp) {
-        tracing::debug!("Applying setvar: {:?} (operation: {:?})", op.name, op.operation);
-        crate::actions::apply_setvar(&mut self.tx, op);
+    fn apply_setvar(&mut self, op: &crate::actions::SetVarOp, matched_var: Option<&str>, matched_var_name: Option<&str>) {
+        crate::actions::apply_setvar(&mut self.tx, op, matched_var, matched_var_name);
 
         // Sync anomaly score from TX if relevant
         if op.name == "anomaly_score" {
@@ -446,5 +484,54 @@ mod tests {
         // Should match but not block
         assert!(!tx.has_intervention());
         assert!(tx.matched_rules().contains(&"1".to_string()));
+    }
+
+    #[test]
+    fn test_matched_rules_filtering() {
+        let ruleset = make_ruleset(r#"
+            SecRule REQUEST_URI "@contains /init" "id:901000,phase:1,pass,nolog,msg:'Initialization rule'"
+            SecRule REQUEST_URI "@contains /score" "id:942100,phase:1,pass,nolog,setvar:TX.anomaly_score=+5"
+            SecRule REQUEST_URI "@contains /block" "id:949110,phase:1,deny,status:403,msg:'Blocking rule'"
+            SecRule REQUEST_URI "@contains /chain" "id:950000,phase:1,pass,chain"
+              SecRule REQUEST_URI "@contains /chain" "phase:1,setvar:TX.anomaly_score=+1"
+            SecRule REQUEST_URI "@contains /nolog" "id:960000,phase:1,deny,nolog"
+        "#);
+
+        // Test initialization rule (should match but NOT be in matched_rules due to no-score/no-block)
+        let mut tx1 = Transaction::new(ruleset.clone(), 403);
+        tx1.process_uri("/init", "GET", "HTTP/1.1").unwrap();
+        tx1.process_request_headers().unwrap();
+        assert!(!tx1.matched_rules().contains(&"901000".to_string()), "Initialization rule should NOT be logged");
+
+        // Test scoring rule (should be in matched_rules even if it has nolog, wait... no)
+        // Actually, if it has nolog, it should be excluded. 
+        // In the ruleset string above, id 942100 has nolog. 
+        let mut tx2 = Transaction::new(ruleset.clone(), 403);
+        tx2.process_uri("/score", "GET", "HTTP/1.1").unwrap();
+        tx2.process_request_headers().unwrap();
+        assert!(!tx2.matched_rules().contains(&"942100".to_string()), "Rule with nolog should NOT be logged");
+
+        // Test blocking rule (should be in matched_rules)
+        let mut tx3 = Transaction::new(ruleset.clone(), 403);
+        tx3.process_uri("/block", "GET", "HTTP/1.1").unwrap();
+        tx3.process_request_headers().unwrap();
+        assert!(tx3.matched_rules().contains(&"949110".to_string()), "Blocking rule SHOULD be logged");
+
+        // Test chain rule (id 950000 should be logged because the chain increments score)
+        let mut tx4 = Transaction::new(ruleset.clone(), 403);
+        tx4.process_uri("/chain", "GET", "HTTP/1.1").unwrap();
+        tx4.process_request_headers().unwrap();
+        assert!(tx4.matched_rules().contains(&"950000".to_string()), "Chain head ID SHOULD be logged for matching chain");
+
+        // Test multiple matches in one transaction
+        // /init matches 901000 (nolog)
+        // /block matches 949110 (log)
+        // Only 949110 should be in matched_rules
+        let mut tx6 = Transaction::new(ruleset.clone(), 403);
+        tx6.process_uri("/init/block", "GET", "HTTP/1.1").unwrap(); // This URI matches BOTH rules
+        tx6.process_request_headers().unwrap();
+        assert!(!tx6.matched_rules().contains(&"901000".to_string()), "Initialization rule should NOT be logged even with another match");
+        assert!(tx6.matched_rules().contains(&"949110".to_string()), "Blocking rule SHOULD be logged");
+        assert_eq!(tx6.matched_rules().len(), 1, "There should be EXACTLY one matched rule");
     }
 }

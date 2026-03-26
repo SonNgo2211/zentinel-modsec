@@ -4,10 +4,16 @@ use super::{SetVarOp, SetVarOperation};
 use crate::variables::{Collection, MutableCollection};
 
 /// Apply a setvar operation to a collection.
-pub fn apply_setvar<C: MutableCollection>(collection: &mut C, op: &SetVarOp) {
+pub fn apply_setvar<C: MutableCollection>(
+    collection: &mut C,
+    op: &SetVarOp,
+    matched_var: Option<&str>,
+    matched_var_name: Option<&str>,
+) {
     match &op.operation {
         SetVarOperation::Set(value) => {
-            collection.set(op.name.clone(), value.clone());
+            let expanded = expand_macros(value, collection, matched_var, matched_var_name);
+            collection.set(op.name.clone(), expanded);
         }
         SetVarOperation::Increment(delta) => {
             collection.increment(&op.name, *delta);
@@ -29,20 +35,33 @@ pub fn apply_setvar<C: MutableCollection>(collection: &mut C, op: &SetVarOp) {
 /// - %{MATCHED_VAR_NAME} - The matched variable name
 pub fn expand_macros(
     value: &str,
-    tx: &impl Collection,
+    tx: &(impl Collection + ?Sized),
     matched_var: Option<&str>,
     matched_var_name: Option<&str>,
 ) -> String {
     let mut result = value.to_string();
 
-    // Expand %{TX.varname}
-    let tx_re = regex::Regex::new(r"%\{TX\.([^}]+)\}").unwrap();
+    // Handle score increments like "+%{tx.critical_anomaly_score}"
+    let mut prefix = "";
+    let mut process_val = value;
+    if value.starts_with('+') {
+        prefix = "+";
+        process_val = &value[1..];
+    } else if value.starts_with('-') {
+        prefix = "-";
+        process_val = &value[1..];
+    }
+    
+    result = process_val.to_string();
+
+    // Expand %{tx.varname} (case insensitive)
+    let tx_re = regex::Regex::new(r"(?i)%\{TX\.([^}]+)\}").unwrap();
     result = tx_re
         .replace_all(&result, |caps: &regex::Captures| {
             let var_name = &caps[1];
             tx.get(var_name)
                 .and_then(|v| v.first().map(|s| s.to_string()))
-                .unwrap_or_default()
+                .unwrap_or_else(|| "0".to_string()) // Default to 0 for numeric increments
         })
         .into_owned();
 
@@ -56,7 +75,7 @@ pub fn expand_macros(
         result = result.replace("%{MATCHED_VAR_NAME}", mvn);
     }
 
-    result
+    format!("{}{}", prefix, result)
 }
 
 #[cfg(test)]

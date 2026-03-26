@@ -48,35 +48,9 @@ impl IpMatchOperator {
 
     /// Create from a file containing IPs/CIDRs.
     pub fn from_file(path: &str) -> Result<Self> {
-        // Try the path as-is first, then common CRS locations
-        let possible_paths = [
-            path.to_string(),
-            format!("/etc/modsecurity/rules/{}", path),
-            format!("/etc/modsecurity/config/rules/{}", path),
-            format!("/etc/modsecurity/config/{}", path),
-            format!("/etc/modsecurity/{}", path),
-            format!("test-rules/crs/rules/{}", path),
-            format!("rules/{}", path),
-        ];
-
-        let mut content = None;
-        let mut last_error = None;
-
-        for p in &possible_paths {
-            match std::fs::read_to_string(p) {
-                Ok(c) => {
-                    content = Some(c);
-                    break;
-                }
-                Err(e) => {
-                    last_error = Some(e);
-                }
-            }
-        }
-
-        let content = content.ok_or_else(|| Error::RuleFileLoad {
+        let content = std::fs::read_to_string(path).map_err(|e| Error::RuleFileLoad {
             path: path.into(),
-            source: last_error.unwrap(),
+            source: e,
         })?;
 
         let networks = content
@@ -117,8 +91,8 @@ impl IpMatchOperator {
 }
 
 impl Operator for IpMatchOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
-        if let Ok(ip) = value.parse::<IpAddr>() {
+    fn execute(&self, value: &str, _tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
+        if let Ok(ip) = value.parse::<std::net::IpAddr>() {
             if self.contains(&ip) {
                 return OperatorResult::matched(value.to_string());
             }

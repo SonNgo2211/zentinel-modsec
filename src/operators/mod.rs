@@ -30,17 +30,17 @@ pub fn create_operator(name: OperatorName, argument: &str) -> Result<Arc<dyn Ope
         name,
         argument: argument.to_string(),
     };
-    compile_operator(&spec)
+    compile_operator(&spec, None)
 }
 
 /// Create a compiled operator from a specification.
-pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
+pub fn compile_operator(spec: &OperatorSpec, base_path: Option<&std::path::Path>) -> Result<Arc<dyn Operator>> {
     let name = &spec.name;
     let argument = &spec.argument;
     match name {
         OperatorName::Rx => Ok(Arc::new(RxOperator::new(argument)?)),
         OperatorName::Pm | OperatorName::Pmf => Ok(Arc::new(PmOperator::new(argument)?)),
-        OperatorName::PmFromFile => Ok(Arc::new(PmOperator::from_file(argument)?)),
+        OperatorName::PmFromFile => Ok(Arc::new(PmOperator::from_file(argument, base_path)?)),
         OperatorName::Contains => Ok(Arc::new(ContainsOperator::new(argument))),
         OperatorName::BeginsWith => Ok(Arc::new(BeginsWithOperator::new(argument))),
         OperatorName::EndsWith => Ok(Arc::new(EndsWithOperator::new(argument))),
@@ -84,7 +84,7 @@ pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
 pub struct NoMatchOperator;
 
 impl Operator for NoMatchOperator {
-    fn execute(&self, _value: &str) -> OperatorResult {
+    fn execute(&self, _value: &str, _tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
         OperatorResult::no_match()
     }
 
@@ -97,7 +97,7 @@ impl Operator for NoMatchOperator {
 pub struct UnconditionalMatchOperator;
 
 impl Operator for UnconditionalMatchOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
+    fn execute(&self, value: &str, _tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
         OperatorResult::matched(value.to_string())
     }
 
@@ -135,7 +135,7 @@ impl ValidateByteRangeOperator {
 }
 
 impl Operator for ValidateByteRangeOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
+    fn execute(&self, value: &str, _tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
         // Check if all bytes are within the allowed ranges
         for byte in value.bytes() {
             let valid = self.ranges.iter().any(|(start, end)| byte >= *start && byte <= *end);
@@ -167,8 +167,21 @@ impl WithinOperator {
 }
 
 impl Operator for WithinOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
-        if self.values.iter().any(|v| v == value) {
+    fn execute(&self, value: &str, tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
+        let expanded_values = if let Some(tx) = tx {
+            self.values
+                .iter()
+                .flat_map(|v| {
+                    crate::actions::data::expand_macros(v, tx, None, None)
+                        .split_whitespace()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        } else {
+            self.values.clone()
+        };
+        if expanded_values.iter().any(|v| v == value) {
             OperatorResult::matched(value.to_string())
         } else {
             OperatorResult::no_match()
@@ -192,13 +205,22 @@ impl NeOperator {
             expected: expected.to_string(),
         }
     }
+
+    fn target_value(&self, tx: Option<&dyn crate::variables::Collection>) -> Option<i64> {
+        if let Some(tx) = tx {
+            let expanded = crate::actions::data::expand_macros(&self.expected, tx, None, None);
+            expanded.parse::<i64>().ok()
+        } else {
+            self.expected.parse::<i64>().ok()
+        }
+    }
 }
 
 impl Operator for NeOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
-        // Try numeric comparison first
-        if let (Ok(a), Ok(b)) = (value.parse::<i64>(), self.expected.parse::<i64>()) {
-            if a != b {
+    fn execute(&self, value: &str, tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
+        let target = self.target_value(tx);
+        if let (Some(target), Ok(n)) = (target, value.parse::<i64>()) {
+            if n != target {
                 return OperatorResult::matched(value.to_string());
             }
         } else if value != self.expected {

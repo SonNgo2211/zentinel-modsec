@@ -17,7 +17,7 @@ impl ContainsOperator {
 }
 
 impl Operator for ContainsOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
+    fn execute(&self, value: &str, _tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
         if value.contains(&self.needle) {
             OperatorResult::matched(self.needle.clone())
         } else {
@@ -44,7 +44,7 @@ impl BeginsWithOperator {
 }
 
 impl Operator for BeginsWithOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
+    fn execute(&self, value: &str, _tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
         if value.starts_with(&self.prefix) {
             OperatorResult::matched(self.prefix.clone())
         } else {
@@ -71,7 +71,7 @@ impl EndsWithOperator {
 }
 
 impl Operator for EndsWithOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
+    fn execute(&self, value: &str, _tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
         if value.ends_with(&self.suffix) {
             OperatorResult::matched(self.suffix.clone())
         } else {
@@ -98,7 +98,7 @@ impl StreqOperator {
 }
 
 impl Operator for StreqOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
+    fn execute(&self, value: &str, _tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
         if value == self.expected {
             OperatorResult::matched(value.to_string())
         } else {
@@ -125,26 +125,25 @@ impl EqOperator {
         }
     }
 
-    fn target_value(&self) -> Option<i64> {
-        // If it's a variable reference, we can't resolve it statically
-        if self.arg.contains("%{") {
-            return None;
-        }
-        self.arg.parse().ok()
+    fn target_value(&self, tx: Option<&dyn crate::variables::Collection>) -> Option<i64> {
+        let expanded = if let Some(tx) = tx {
+            crate::actions::data::expand_macros(&self.arg, tx, None, None)
+        } else {
+            self.arg.clone()
+        };
+        expanded.parse().ok()
     }
 }
 
 impl Operator for EqOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
-        if let Some(target) = self.target_value() {
+    fn execute(&self, value: &str, tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
+        if let Some(target) = self.target_value(tx) {
             if let Ok(n) = value.parse::<i64>() {
                 if n == target {
                     return OperatorResult::matched(value.to_string());
                 }
             }
         }
-        // For variable references, comparison would need runtime resolution
-        // For now, we don't match if we can't resolve
         OperatorResult::no_match()
     }
 
@@ -165,17 +164,19 @@ impl GtOperator {
         }
     }
 
-    fn target_value(&self) -> Option<i64> {
-        if self.arg.contains("%{") {
-            return None;
-        }
-        self.arg.parse().ok()
+    fn target_value(&self, tx: Option<&dyn crate::variables::Collection>) -> Option<i64> {
+        let expanded = if let Some(tx) = tx {
+            crate::actions::data::expand_macros(&self.arg, tx, None, None)
+        } else {
+            self.arg.clone()
+        };
+        expanded.parse().ok()
     }
 }
 
 impl Operator for GtOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
-        if let Some(target) = self.target_value() {
+    fn execute(&self, value: &str, tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
+        if let Some(target) = self.target_value(tx) {
             if let Ok(n) = value.parse::<i64>() {
                 if n > target {
                     return OperatorResult::matched(value.to_string());
@@ -202,17 +203,19 @@ impl LtOperator {
         }
     }
 
-    fn target_value(&self) -> Option<i64> {
-        if self.arg.contains("%{") {
-            return None;
-        }
-        self.arg.parse().ok()
+    fn target_value(&self, tx: Option<&dyn crate::variables::Collection>) -> Option<i64> {
+        let expanded = if let Some(tx) = tx {
+            crate::actions::data::expand_macros(&self.arg, tx, None, None)
+        } else {
+            self.arg.clone()
+        };
+        expanded.parse().ok()
     }
 }
 
 impl Operator for LtOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
-        if let Some(target) = self.target_value() {
+    fn execute(&self, value: &str, tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
+        if let Some(target) = self.target_value(tx) {
             if let Ok(n) = value.parse::<i64>() {
                 if n < target {
                     return OperatorResult::matched(value.to_string());
@@ -239,17 +242,19 @@ impl GeOperator {
         }
     }
 
-    fn target_value(&self) -> Option<i64> {
-        if self.arg.contains("%{") {
-            return None;
-        }
-        self.arg.parse().ok()
+    fn target_value(&self, tx: Option<&dyn crate::variables::Collection>) -> Option<i64> {
+        let expanded = if let Some(tx) = tx {
+            crate::actions::data::expand_macros(&self.arg, tx, None, None)
+        } else {
+            self.arg.clone()
+        };
+        expanded.parse().ok()
     }
 }
 
 impl Operator for GeOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
-        if let Some(target) = self.target_value() {
+    fn execute(&self, value: &str, tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
+        if let Some(target) = self.target_value(tx) {
             if let Ok(n) = value.parse::<i64>() {
                 if n >= target {
                     return OperatorResult::matched(value.to_string());
@@ -276,17 +281,19 @@ impl LeOperator {
         }
     }
 
-    fn target_value(&self) -> Option<i64> {
-        if self.arg.contains("%{") {
-            return None;
-        }
-        self.arg.parse().ok()
+    fn target_value(&self, tx: Option<&dyn crate::variables::Collection>) -> Option<i64> {
+        let expanded = if let Some(tx) = tx {
+            crate::actions::data::expand_macros(&self.arg, tx, None, None)
+        } else {
+            self.arg.clone()
+        };
+        expanded.parse().ok()
     }
 }
 
 impl Operator for LeOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
-        if let Some(target) = self.target_value() {
+    fn execute(&self, value: &str, tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
+        if let Some(target) = self.target_value(tx) {
             if let Ok(n) = value.parse::<i64>() {
                 if n <= target {
                     return OperatorResult::matched(value.to_string());
@@ -340,11 +347,11 @@ mod tests {
         assert!(!eq.execute("11").matched);
 
         let gt = GtOperator::new("10");
-        assert!(gt.execute("11").matched);
-        assert!(!gt.execute("10").matched);
+        assert!(gt.execute("11", None).matched);
+        assert!(!gt.execute("10", None).matched);
 
         let lt = LtOperator::new("10");
-        assert!(lt.execute("9").matched);
-        assert!(!lt.execute("10").matched);
+        assert!(lt.execute("9", None).matched);
+        assert!(!lt.execute("10", None).matched);
     }
 }

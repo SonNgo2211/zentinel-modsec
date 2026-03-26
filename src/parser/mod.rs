@@ -111,12 +111,10 @@ impl Parser {
             match entry {
                 Ok(path) => {
                     if path.is_file() {
-                        println!("DEBUG: Parsing rule file: {:?}", path);
                         self.parse_file(&path)?;
                     }
                 }
                 Err(e) => {
-                    println!("DEBUG: Glob entry error: {}", e);
                     tracing::warn!(error = %e, "error reading glob entry");
                 }
             }

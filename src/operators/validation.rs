@@ -6,7 +6,7 @@ use super::traits::{Operator, OperatorResult};
 pub struct ValidateUrlEncodingOperator;
 
 impl Operator for ValidateUrlEncodingOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
+    fn execute(&self, value: &str, _tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
         if is_valid_url_encoding(value) {
             OperatorResult::no_match() // Valid encoding = no match (not an attack)
         } else {
@@ -23,7 +23,7 @@ impl Operator for ValidateUrlEncodingOperator {
 pub struct ValidateUtf8EncodingOperator;
 
 impl Operator for ValidateUtf8EncodingOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
+    fn execute(&self, value: &str, _tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
         // In Rust, &str is always valid UTF-8, so we check for overlong encodings
         // and other invalid sequences that might have been decoded
         if is_valid_utf8_sequence(value) {

@@ -43,7 +43,7 @@ impl OperatorResult {
 /// Trait for all operators.
 pub trait Operator: Send + Sync {
     /// Execute the operator against a value.
-    fn execute(&self, value: &str) -> OperatorResult;
+    fn execute(&self, value: &str, tx: Option<&dyn crate::variables::Collection>) -> OperatorResult;
 
     /// Get the operator name.
     fn name(&self) -> &'static str;

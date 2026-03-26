@@ -2,7 +2,7 @@
 
 mod disruptive;
 mod flow;
-mod data;
+pub mod data;
 mod metadata;
 
 pub use disruptive::*;
@@ -104,6 +104,8 @@ pub struct RuleMetadata {
     pub logdata: Option<String>,
     /// Severity (0-7).
     pub severity: Option<u8>,
+    /// Whether to suppress logging for this rule.
+    pub no_log: bool,
     /// Tags.
     pub tags: Vec<String>,
     /// Maturity level.
@@ -262,10 +264,16 @@ fn execute_metadata(action: &MetadataAction, metadata: &mut RuleMetadata) {
 }
 
 /// Execute a logging action.
-fn execute_logging(action: &LoggingAction, _metadata: &mut RuleMetadata) {
+fn execute_logging(action: &LoggingAction, metadata: &mut RuleMetadata) {
     match action {
-        LoggingAction::Log | LoggingAction::NoLog | LoggingAction::AuditLog | LoggingAction::NoAuditLog => {
-            // Logging flags handled elsewhere
+        LoggingAction::Log => {
+            metadata.no_log = false;
+        }
+        LoggingAction::NoLog => {
+            metadata.no_log = true;
+        }
+        LoggingAction::AuditLog | LoggingAction::NoAuditLog => {
+            // Audit logging flags could be handled similarly
         }
         LoggingAction::SanitiseMatched | LoggingAction::SanitizeMatched => {
             // Sanitization not implemented yet

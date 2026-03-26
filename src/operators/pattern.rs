@@ -48,7 +48,7 @@ impl RxOperator {
 }
 
 impl Operator for RxOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
+    fn execute(&self, value: &str, _tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
         let regex = match self.get_regex() {
             Ok(r) => r,
             Err(_) => return OperatorResult::no_match(),
@@ -112,17 +112,18 @@ impl PmOperator {
     }
 
     /// Create a phrase match operator from a file.
-    pub fn from_file(path: &str) -> Result<Self> {
-        // Try the path as-is first, then common CRS locations
-        let possible_paths = [
-            path.to_string(),
-            format!("/etc/modsecurity/rules/{}", path),
-            format!("/etc/modsecurity/config/rules/{}", path),
-            format!("/etc/modsecurity/config/{}", path),
-            format!("/etc/modsecurity/{}", path),
-            format!("test-rules/crs/rules/{}", path),
-            format!("rules/{}", path),
-        ];
+    pub fn from_file(path: &str, base_path: Option<&std::path::Path>) -> Result<Self> {
+        // Try the path as-is first, then relative to base_path, then common CRS locations
+        let mut possible_paths = vec![path.to_string()];
+
+        if let Some(base) = base_path {
+            if let Some(parent) = base.parent() {
+                possible_paths.push(parent.join(path).to_string_lossy().to_string());
+            }
+        }
+
+        possible_paths.push(format!("test-rules/crs/rules/{}", path));
+        possible_paths.push(format!("rules/{}", path));
 
         let mut content = None;
         let mut last_error = None;
@@ -169,7 +170,7 @@ impl PmOperator {
 }
 
 impl Operator for PmOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
+    fn execute(&self, value: &str, _tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
         if let Some(mat) = self.automaton.find(value) {
             let matched = &self.patterns[mat.pattern().as_usize()];
             OperatorResult::matched(matched.clone())

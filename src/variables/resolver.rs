@@ -37,19 +37,31 @@ impl<'a> VariableResolver<'a> {
     /// Resolve a variable specification to values.
     pub fn resolve(&self, spec: &VariableSpec) -> Vec<(String, String)> {
         let values = self.resolve_variable(spec.name, &spec.selection);
-        tracing::debug!("Resolving variable {:?}({:?}) -> {} values", spec.name, spec.selection, values.len());
-        for (k, v) in &values {
-            tracing::debug!("    {} = {:?}", k, v);
-        }
 
         // Apply exclusions
-        if spec.exclusions.is_empty() {
+        let filtered = if spec.exclusions.is_empty() {
             values
         } else {
             values
                 .into_iter()
                 .filter(|(k, _)| !spec.exclusions.iter().any(|e| k.contains(e)))
                 .collect()
+        };
+
+        if spec.count_mode {
+            let name_str = match spec.name {
+                VariableName::Args => "ARGS",
+                VariableName::ArgsGet => "ARGS_GET",
+                VariableName::ArgsPost => "ARGS_POST",
+                VariableName::RequestUri => "REQUEST_URI",
+                VariableName::RequestHeaders => "REQUEST_HEADERS",
+                VariableName::RequestCookies => "REQUEST_COOKIES",
+                VariableName::Tx => "TX",
+                _ => "VARIABLE", // Fallback
+            };
+            vec![(format!("&{}", name_str), filtered.len().to_string())]
+        } else {
+            filtered
         }
     }
 
@@ -166,6 +178,24 @@ impl<'a> VariableResolver<'a> {
                 .iter()
                 .map(|(k, v)| (format!("MATCHED_VARS:{}", k), v.clone()))
                 .collect(),
+
+            // Request body processing and scores
+            VariableName::ReqBodyError | VariableName::ReqBodyProcessorError | VariableName::MultipartStrictError |
+            VariableName::InboundAnomalyScore | VariableName::OutboundAnomalyScore | VariableName::MultipartStrictCheck => {
+                let key = match name {
+                    VariableName::ReqBodyError => "REQBODY_ERROR",
+                    VariableName::ReqBodyProcessorError => "REQBODY_PROCESSOR_ERROR",
+                    VariableName::MultipartStrictError => "MULTIPART_STRICT_ERROR",
+                    VariableName::InboundAnomalyScore => "INBOUND_ANOMALY_SCORE",
+                    VariableName::OutboundAnomalyScore => "OUTBOUND_ANOMALY_SCORE",
+                    VariableName::MultipartStrictCheck => "MULTIPART_STRICT_CHECK",
+                    _ => "UNKNOWN",
+                };
+                vec![(key.to_string(), "0".to_string())]
+            }
+            VariableName::ReqBodyErrorMsg | VariableName::ReqBodyProcessorErrorMsg => {
+                vec![]
+            }
 
             // Default - empty
             _ => vec![],

@@ -9,7 +9,7 @@ use crate::libinjection;
 pub struct DetectSqliOperator;
 
 impl Operator for DetectSqliOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
+    fn execute(&self, value: &str, _tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
         let result = libinjection::sqli::detect_sqli(value);
         if result.is_injection {
             OperatorResult::matched(result.fingerprint.unwrap_or_default())
@@ -27,7 +27,7 @@ impl Operator for DetectSqliOperator {
 pub struct DetectXssOperator;
 
 impl Operator for DetectXssOperator {
-    fn execute(&self, value: &str) -> OperatorResult {
+    fn execute(&self, value: &str, _tx: Option<&dyn crate::variables::Collection>) -> OperatorResult {
         let result = libinjection::xss::detect_xss(value);
         if result.is_injection {
             OperatorResult::matched(result.fingerprint.unwrap_or_default())
