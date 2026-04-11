@@ -45,6 +45,7 @@ pub mod parser;
 pub mod variables;
 pub mod operators;
 pub mod transformations;
+pub mod logging;
 pub mod actions;
 pub mod engine;
 pub mod libinjection;
