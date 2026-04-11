@@ -66,6 +66,12 @@ phf = { version = "0.13", features = ["macros"] }
 # Optional: geolocation
 maxminddb = { version = "0.27", optional = true }
 
+# Added for WAF Logger
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["rt", "sync", "fs", "io-util", "macros"] }
+chrono = { version = "0.4", features = ["serde"] }
+
 [features]
 default = []
 geo = ["maxminddb"]
